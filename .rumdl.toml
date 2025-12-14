@@ -1,0 +1,16 @@
+# rumdl configuration - INCLUSION-BASED approach
+# Only lint user-facing documentation
+
+[global]
+respect_gitignore = true
+# ONLY lint these paths (everything else ignored)
+include = ["./README.md"]
+
+[MD013]
+line_length = 120
+code_blocks = false
+tables = false
+headings = true
+
+[MD033]
+allowed_elements = ["span", "div", "Tip", "example", "commentary"]
