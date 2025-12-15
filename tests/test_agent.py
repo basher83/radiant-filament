@@ -104,3 +104,94 @@ def test_initial_connection_failure_raises():
 
     with pytest.raises(Exception, match="API Error"):
         list(agent.start_research_stream("test prompt"))
+
+
+def test_merge_agent_config_with_none():
+    """Test that None config returns defaults."""
+    agent = DeepResearchAgent()
+    result = agent._merge_agent_config(None)
+    assert result == {"type": "deep-research", "thinking_summaries": "auto"}
+
+
+def test_merge_agent_config_with_override():
+    """Test that user config overrides defaults."""
+    agent = DeepResearchAgent()
+    result = agent._merge_agent_config({"thinking_summaries": "none"})
+    assert result == {"type": "deep-research", "thinking_summaries": "none"}
+
+
+def test_merge_agent_config_preserves_type():
+    """Test that type is preserved unless explicitly overridden."""
+    agent = DeepResearchAgent()
+    result = agent._merge_agent_config({"custom_key": "value"})
+    assert result["type"] == "deep-research"
+    assert result["custom_key"] == "value"
+
+
+def test_stream_with_previous_interaction_id(monkeypatch):
+    """Test that previous_interaction_id is passed to create."""
+    mock_client = MagicMock()
+
+    def stream():
+        yield MockEvent("interaction.start", restart=True)
+        yield MockEvent("interaction.complete")
+
+    mock_client.interactions.create.return_value = stream()
+
+    agent = DeepResearchAgent()
+    agent.client = mock_client
+
+    list(agent.start_research_stream("follow-up", previous_interaction_id="prev_123"))
+
+    _, kwargs = mock_client.interactions.create.call_args
+    assert kwargs["previous_interaction_id"] == "prev_123"
+
+
+def test_stream_with_model_instead_of_agent(monkeypatch):
+    """Test that model parameter replaces agent parameter."""
+    mock_client = MagicMock()
+
+    def stream():
+        yield MockEvent("interaction.start", restart=True)
+        yield MockEvent("interaction.complete")
+
+    mock_client.interactions.create.return_value = stream()
+
+    agent = DeepResearchAgent()
+    agent.client = mock_client
+
+    list(
+        agent.start_research_stream(
+            "summarize", previous_interaction_id="prev_123", model="gemini-2.5-pro"
+        )
+    )
+
+    _, kwargs = mock_client.interactions.create.call_args
+    assert kwargs["model"] == "gemini-2.5-pro"
+    assert "agent" not in kwargs
+    assert "agent_config" not in kwargs
+
+
+def test_stream_with_tools(monkeypatch):
+    """Test that tools are passed to create."""
+    mock_client = MagicMock()
+
+    def stream():
+        yield MockEvent("interaction.start", restart=True)
+        yield MockEvent("interaction.complete")
+
+    mock_client.interactions.create.return_value = stream()
+
+    agent = DeepResearchAgent()
+    agent.client = mock_client
+
+    tools = [
+        {
+            "type": "file_search",
+            "file_search_store_names": ["fileSearchStores/my-store"],
+        }
+    ]
+    list(agent.start_research_stream("analyze docs", tools=tools))
+
+    _, kwargs = mock_client.interactions.create.call_args
+    assert kwargs["tools"] == tools
