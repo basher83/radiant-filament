@@ -1,0 +1,248 @@
+# Gemini Deep Research API Reference
+
+> **Official Documentation:** https://ai.google.dev/gemini-api/docs/deep-research
+
+The Gemini Deep Research Agent autonomously plans, executes, and synthesizes multi-step research tasks. Powered by Gemini 3 Pro, it navigates complex information landscapes using web search and your own data to produce detailed, cited reports.
+
+Research tasks involve iterative searching and reading and can take several minutes to complete. You must use **background execution** (set `background=True`) to run the agent asynchronously and poll for results.
+
+> **Preview:** The Gemini Deep Research Agent is currently in preview. The Deep Research agent is exclusively available using the Interactions API. You cannot access it through `generate_content`.
+
+## Basic Usage
+
+Start a research task in the background and poll for results:
+
+```python
+import time
+from google import genai
+
+client = genai.Client()
+
+interaction = client.interactions.create(
+    input="Research the history of Google TPUs.",
+    agent="deep-research-pro-preview-12-2025",
+    background=True
+)
+
+print(f"Research started: {interaction.id}")
+
+while True:
+    interaction = client.interactions.get(interaction.id)
+    if interaction.status == "completed":
+        print(interaction.outputs[-1].text)
+        break
+    elif interaction.status == "failed":
+        print(f"Research failed: {interaction.error}")
+        break
+    time.sleep(10)
+```
+
+## Research with Your Own Data
+
+Deep Research has access to web search by default. To additionally use your own data via File Search:
+
+> **Experimental:** Using Deep Research with `file_search` is still experimental.
+
+```python
+import time
+from google import genai
+
+client = genai.Client()
+
+interaction = client.interactions.create(
+    input="Compare our 2025 fiscal year report against current public web news.",
+    agent="deep-research-pro-preview-12-2025",
+    background=True,
+    tools=[
+        {
+            "type": "file_search",
+            "file_search_store_names": ["fileSearchStores/my-store-name"]
+        }
+    ]
+)
+```
+
+## Steerability and Formatting
+
+Steer the agent's output by providing specific formatting instructions in your prompt:
+
+```python
+prompt = """
+Research the competitive landscape of EV batteries.
+
+Format the output as a technical report with the following structure:
+1. Executive Summary
+2. Key Players (Must include a data table comparing capacity and chemistry)
+3. Supply Chain Risks
+"""
+
+interaction = client.interactions.create(
+    input=prompt,
+    agent="deep-research-pro-preview-12-2025",
+    background=True
+)
+```
+
+## Streaming
+
+Deep Research supports streaming to receive real-time updates. You must set `stream=True` and `background=True`.
+
+> **Note:** To receive intermediate reasoning steps (thoughts) and progress updates, you must enable **thinking summaries** in the `agent_config`.
+
+```python
+stream = client.interactions.create(
+    input="Research the history of Google TPUs.",
+    agent="deep-research-pro-preview-12-2025",
+    background=True,
+    stream=True,
+    agent_config={
+        "type": "deep-research",
+        "thinking_summaries": "auto"
+    }
+)
+
+interaction_id = None
+last_event_id = None
+
+for chunk in stream:
+    if chunk.event_type == "interaction.start":
+        interaction_id = chunk.interaction.id
+        print(f"Interaction started: {interaction_id}")
+
+    if chunk.event_id:
+        last_event_id = chunk.event_id
+
+    if chunk.event_type == "content.delta":
+        if chunk.delta.type == "text":
+            print(chunk.delta.text, end="", flush=True)
+        elif chunk.delta.type == "thought_summary":
+            print(f"Thought: {chunk.delta.content.text}", flush=True)
+
+    elif chunk.event_type == "interaction.complete":
+        print("\nResearch Complete")
+```
+
+## Reconnecting to Stream
+
+Network interruptions can occur during long-running research tasks. Handle this by catching connection errors and resuming with `client.interactions.get()`.
+
+You must provide two values to resume:
+1. **Interaction ID:** From the `interaction.start` event in the initial stream
+2. **Last Event ID:** The ID of the last successfully processed event
+
+```python
+import time
+from google import genai
+
+client = genai.Client()
+
+# Configuration
+agent_name = "deep-research-pro-preview-12-2025"
+prompt = "Compare golang SDK test frameworks"
+
+# State tracking
+last_event_id = None
+interaction_id = None
+is_complete = False
+
+def process_stream(event_stream):
+    """Helper to process events from any stream source."""
+    global last_event_id, interaction_id, is_complete
+    for event in event_stream:
+        # Capture Interaction ID
+        if event.event_type == "interaction.start":
+            interaction_id = event.interaction.id
+            print(f"Interaction started: {interaction_id}")
+
+        # Capture Event ID
+        if event.event_id:
+            last_event_id = event.event_id
+
+        # Print content
+        if event.event_type == "content.delta":
+            if event.delta.type == "text":
+                print(event.delta.text, end="", flush=True)
+            elif event.delta.type == "thought_summary":
+                print(f"Thought: {event.delta.content.text}", flush=True)
+
+        # Check completion
+        if event.event_type in ["interaction.complete", "error"]:
+            is_complete = True
+
+# 1. Attempt initial streaming request
+try:
+    print("Starting Research...")
+    initial_stream = client.interactions.create(
+        input=prompt,
+        agent=agent_name,
+        background=True,
+        stream=True,
+        agent_config={
+            "type": "deep-research",
+            "thinking_summaries": "auto"
+        }
+    )
+    process_stream(initial_stream)
+except Exception as e:
+    print(f"\nInitial connection dropped: {e}")
+
+# 2. Reconnection Loop
+while not is_complete and interaction_id:
+    print(f"\nConnection lost. Resuming from event {last_event_id}...")
+    time.sleep(2)
+
+    try:
+        resume_stream = client.interactions.get(
+            id=interaction_id,
+            stream=True,
+            last_event_id=last_event_id
+        )
+        process_stream(resume_stream)
+    except Exception as e:
+        print(f"Reconnection failed, retrying... ({e})")
+```
+
+## Follow-up Questions
+
+Continue the conversation after the agent returns by using `previous_interaction_id`:
+
+```python
+import time
+from google import genai
+
+client = genai.Client()
+
+interaction = client.interactions.create(
+    input="Can you elaborate on the second point in the report?",
+    agent="deep-research-pro-preview-12-2025",
+    previous_interaction_id="COMPLETED_INTERACTION_ID"
+)
+
+print(interaction.outputs[-1].text)
+```
+
+## When to Use Deep Research
+
+Deep Research is an **agent**, not just a model. Best suited for workloads requiring an "analyst-in-a-box" approach rather than low-latency chat.
+
+| Feature | Standard Gemini Models | Gemini Deep Research Agent |
+|---------|------------------------|----------------------------|
+| **Latency** | Seconds | Minutes (Async/Background) |
+| **Process** | Generate -> Output | Plan -> Search -> Read -> Iterate -> Output |
+| **Output** | Conversational text, code, short summaries | Detailed reports, long-form analysis, comparative tables |
+| **Best For** | Chatbots, extraction, creative writing | Market analysis, due diligence, literature reviews, competitive landscaping |
+
+## Limitations
+
+- **Beta status**: The Interactions API is in public beta. Features and schemas may change.
+- **Custom tools:** Cannot provide custom Function Calling tools or remote MCP servers.
+- **Structured output:** Does not support human approved planning or structured outputs.
+- **Max research time:** 60 minutes maximum, most tasks complete within 20 minutes.
+- **Store requirement:** Agent execution using `background=True` requires `store=True`.
+- **Audio inputs:** Not supported.
+
+## Best Practices
+
+- **Prompt for unknowns:** Instruct the agent on how to handle missing data (e.g., "If specific figures for 2025 are not available, explicitly state they are projections or unavailable rather than estimating").
+- **Provide context:** Ground the agent's research by providing background information or constraints directly in the input prompt.
+- **Multimodal inputs:** Deep Research Agent supports multi-modal inputs. Use cautiously as this increases costs and risks context window overflow.
