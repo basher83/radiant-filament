@@ -1,3 +1,4 @@
+#:tombi schema.strict = false
 # rumdl configuration - INCLUSION-BASED approach
 # Only lint user-facing documentation
 
