@@ -37,6 +37,7 @@ class DeepResearchAgent:
                 background=True,
                 stream=True,
                 agent_config=agent_config,
+                timeout=None,
             )
             for event in stream:
                 yield event
@@ -66,6 +67,7 @@ class DeepResearchAgent:
                     id=self.interaction_id,
                     stream=True,
                     last_event_id=self.last_event_id,
+                    timeout=None,
                 )
 
                 # Reset delay on successful connection
@@ -138,6 +140,10 @@ class DeepResearchAgent:
                             self.console.print(
                                 f"[bold red]\nError: {event.error}[/bold red]"
                             )
+                            if "Function call is empty" in str(event.error):
+                                self.console.print(
+                                    "[yellow]Tip: This is a known intermittent issue with the Deep Research Preview model. Please try running the command again.[/yellow]"
+                                )
 
         finally:
             if out_file:
