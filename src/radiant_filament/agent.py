@@ -10,6 +10,8 @@ from rich.spinner import Spinner
 
 
 class DeepResearchAgent:
+    DEFAULT_AGENT_CONFIG = {"type": "deep-research", "thinking_summaries": "auto"}
+
     def __init__(self, agent_name="deep-research-pro-preview-12-2025"):
         self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         self.agent_name = agent_name
@@ -17,13 +19,32 @@ class DeepResearchAgent:
         self.interaction_id = None
         self.console = Console()
 
-    def start_research_stream(self, prompt, agent_config=None):
+    def _merge_agent_config(self, user_config):
+        """Merge user config with defaults. User values override defaults."""
+        if user_config is None:
+            return self.DEFAULT_AGENT_CONFIG.copy()
+        return {**self.DEFAULT_AGENT_CONFIG, **user_config}
+
+    def start_research_stream(
+        self,
+        prompt,
+        agent_config=None,
+        previous_interaction_id=None,
+        model=None,
+        tools=None,
+    ):
         """
         Generates a robust stream of events, handling reconnection automatically.
         Yields all events from the underlying API.
+
+        Args:
+            prompt: The research prompt or follow-up question.
+            agent_config: Optional config to override defaults.
+            previous_interaction_id: For follow-up questions on completed research.
+            model: Use a model instead of agent (only with previous_interaction_id).
+            tools: List of tools (e.g., file_search) for the agent to use.
         """
-        if agent_config is None:
-            agent_config = {"type": "deep-research", "thinking_summaries": "auto"}
+        merged_config = self._merge_agent_config(agent_config)
 
         retry_delay = 2
         max_delay = 60
@@ -31,14 +52,29 @@ class DeepResearchAgent:
 
         # 1. Initial Request
         try:
-            stream = self.client.interactions.create(
-                input=prompt,
-                agent=self.agent_name,
-                background=True,
-                stream=True,
-                agent_config=agent_config,
-                timeout=None,
-            )
+            # Build request kwargs
+            create_kwargs = {
+                "input": prompt,
+                "background": True,
+                "stream": True,
+                "timeout": None,
+            }
+
+            # Use model or agent (model takes precedence for follow-ups)
+            if model:
+                create_kwargs["model"] = model
+            else:
+                create_kwargs["agent"] = self.agent_name
+                create_kwargs["agent_config"] = merged_config
+
+            # Add optional parameters
+            if previous_interaction_id:
+                create_kwargs["previous_interaction_id"] = previous_interaction_id
+
+            if tools:
+                create_kwargs["tools"] = tools
+
+            stream = self.client.interactions.create(**create_kwargs)
             for event in stream:
                 yield event
                 if event.event_type == "interaction.start":
@@ -88,8 +124,25 @@ class DeepResearchAgent:
                 if retry_delay < 1:
                     retry_delay = 1
 
-    def research(self, prompt, agent_config=None, output_path=None):
-        """Starts and manages the research task with UI."""
+    def research(
+        self,
+        prompt,
+        agent_config=None,
+        output_path=None,
+        previous_interaction_id=None,
+        model=None,
+        tools=None,
+    ):
+        """Starts and manages the research task with UI.
+
+        Args:
+            prompt: The research prompt or follow-up question.
+            agent_config: Optional config to override defaults.
+            output_path: Path to save the research report.
+            previous_interaction_id: For follow-up questions on completed research.
+            model: Use a model instead of agent (only with previous_interaction_id).
+            tools: List of tools (e.g., file_search) for the agent to use.
+        """
         out_file = None
         if output_path:
             out_file = open(output_path, "w", encoding="utf-8")
@@ -116,7 +169,13 @@ class DeepResearchAgent:
                 generate_view(), refresh_per_second=10, console=self.console
             ) as live:
                 # Use the robust stream generator
-                for event in self.start_research_stream(prompt, agent_config):
+                for event in self.start_research_stream(
+                    prompt,
+                    agent_config=agent_config,
+                    previous_interaction_id=previous_interaction_id,
+                    model=model,
+                    tools=tools,
+                ):
                     if event.event_type == "interaction.start":
                         current_thought = "Research Started..."
                         live.update(generate_view())
