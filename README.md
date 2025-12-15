@@ -14,6 +14,14 @@ rich terminal interface for conducting deep, agentic research sessions.
   export GEMINI_API_KEY="your-api-key-here"
   ```
 
+## Quick Start (No Installation)
+
+Run directly from GitHub using `uvx`:
+
+```bash
+uvx --from git+https://github.com/basher83/radiant-filament radiant-filament "Your research prompt"
+```
+
 ## Installation
 
 1. Clone the repository:
@@ -31,7 +39,7 @@ rich terminal interface for conducting deep, agentic research sessions.
 
 ## Usage
 
-Run the researcher directly from the CLI:
+Run the researcher from the CLI:
 
 ```bash
 uv run radiant-filament "Your research prompt here"
