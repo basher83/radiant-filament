@@ -13,8 +13,15 @@ def parse_agent_config(value):
 
     # Try as file path first
     if os.path.isfile(value):
-        with open(value, encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(value, encoding="utf-8") as f:
+                return json.load(f)
+        except OSError as e:
+            raise argparse.ArgumentTypeError(f"Cannot read '{value}': {e}") from None
+        except json.JSONDecodeError as e:
+            raise argparse.ArgumentTypeError(
+                f"Invalid JSON in '{value}': {e}"
+            ) from None
 
     # Otherwise parse as JSON string
     try:
@@ -43,6 +50,9 @@ Examples:
 
   # Save output to file
   %(prog)s "Research AI trends" --output report.md
+
+  # Use polling instead of streaming
+  %(prog)s "Research topic" --no-stream
 
   # Follow-up on previous research
   %(prog)s "Elaborate on point 2" --previous-interaction-id <id>
@@ -91,6 +101,11 @@ Examples:
         metavar="JSON",
         help="Agent config as JSON string or path to JSON file",
     )
+    parser.add_argument(
+        "--no-stream",
+        action="store_true",
+        help="Use polling mode instead of streaming",
+    )
 
     args = parser.parse_args()
 
@@ -116,7 +131,8 @@ Examples:
 
     try:
         agent = DeepResearchAgent(agent_name=args.agent_name)
-        agent.research(
+        research_method = agent.research_poll if args.no_stream else agent.research
+        research_method(
             args.prompt,
             agent_config=agent_config,
             output_path=args.output,

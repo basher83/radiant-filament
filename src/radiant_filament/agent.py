@@ -13,7 +13,13 @@ class DeepResearchAgent:
     DEFAULT_AGENT_CONFIG = {"type": "deep-research", "thinking_summaries": "auto"}
 
     def __init__(self, agent_name="deep-research-pro-preview-12-2025"):
-        self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "GEMINI_API_KEY environment variable is required. "
+                "Get your key at https://aistudio.google.com/app/apikey"
+            )
+        self.client = genai.Client(api_key=api_key)
         self.agent_name = agent_name
         self.last_event_id = None
         self.interaction_id = None
@@ -41,13 +47,16 @@ class DeepResearchAgent:
             prompt: The research prompt or follow-up question.
             agent_config: Optional config to override defaults.
             previous_interaction_id: For follow-up questions on completed research.
-            model: Use a model instead of agent (only with previous_interaction_id).
+            model: Use a model instead of agent (CLI enforces this requires
+                previous_interaction_id).
             tools: List of tools (e.g., file_search) for the agent to use.
         """
         merged_config = self._merge_agent_config(agent_config)
 
         retry_delay = 2
         max_delay = 60
+        max_retries = 10
+        retry_count = 0
         is_complete = False
 
         # 1. Initial Request
@@ -60,7 +69,7 @@ class DeepResearchAgent:
                 "timeout": None,
             }
 
-            # Use model or agent (model takes precedence for follow-ups)
+            # Use model if provided, otherwise use agent
             if model:
                 create_kwargs["model"] = model
             else:
@@ -84,16 +93,15 @@ class DeepResearchAgent:
                 if event.event_type in ["interaction.complete", "error"]:
                     is_complete = True
 
-            # If stream finishes normally without complete/error (e.g. empty), consider it done or handle?
-            # Usually strict stream end means connection close.
-
         except Exception as e:
             # If we haven't established an interaction yet, we can't reconnect.
             # Re-raise the exception to notify the user.
             if not self.interaction_id:
                 raise e
-            # Initial connection failed or dropped mid-stream; proceed to reconnection loop.
-            pass
+            # Initial connection dropped mid-stream; proceed to reconnection loop.
+            self.console.print(
+                f"[yellow]Stream interrupted: {e}. Reconnecting...[/yellow]"
+            )
 
         # 2. Reconnection Loop
         while not is_complete and self.interaction_id:
@@ -116,13 +124,22 @@ class DeepResearchAgent:
                     if event.event_type in ["interaction.complete", "error"]:
                         is_complete = True
 
-            except Exception:
+                # Reset retry count on successful stream processing
+                retry_count = 0
+
+            except Exception as e:
                 # Reconnection failed; back off and retry
+                retry_count += 1
+                self.console.print(
+                    f"[yellow]Connection interrupted: {e}. "
+                    f"Reconnecting ({retry_count}/{max_retries})...[/yellow]"
+                )
+                if retry_count >= max_retries:
+                    raise RuntimeError(
+                        f"Failed to reconnect after {max_retries} attempts: {e}"
+                    ) from e
                 time.sleep(retry_delay)
                 retry_delay = min(retry_delay * 2, max_delay)
-                # Ensure we don't busy loop too fast if sleep raises
-                if retry_delay < 1:
-                    retry_delay = 1
 
     def research(
         self,
@@ -140,12 +157,16 @@ class DeepResearchAgent:
             agent_config: Optional config to override defaults.
             output_path: Path to save the research report.
             previous_interaction_id: For follow-up questions on completed research.
-            model: Use a model instead of agent (only with previous_interaction_id).
+            model: Use a model instead of agent (CLI enforces this requires
+                previous_interaction_id).
             tools: List of tools (e.g., file_search) for the agent to use.
         """
         out_file = None
         if output_path:
-            out_file = open(output_path, "w", encoding="utf-8")
+            try:
+                out_file = open(output_path, "w", encoding="utf-8")
+            except OSError as e:
+                raise RuntimeError(f"Cannot write to '{output_path}': {e}") from e
 
         accumulated_text = ""
         current_thought = "Connecting..."
@@ -207,3 +228,145 @@ class DeepResearchAgent:
         finally:
             if out_file:
                 out_file.close()
+
+    def research_poll(
+        self,
+        prompt,
+        agent_config=None,
+        output_path=None,
+        previous_interaction_id=None,
+        model=None,
+        tools=None,
+        poll_interval=5,
+    ):
+        """Starts and manages the research task using polling instead of streaming.
+
+        Args:
+            prompt: The research prompt or follow-up question.
+            agent_config: Optional config to override defaults.
+            output_path: Path to save the research report.
+            previous_interaction_id: For follow-up questions on completed research.
+            model: Use a model instead of agent (CLI enforces this requires
+                previous_interaction_id).
+            tools: List of tools (e.g., file_search) for the agent to use.
+            poll_interval: Seconds between status polls (default: 5).
+        """
+        merged_config = self._merge_agent_config(agent_config)
+
+        # Build request kwargs
+        create_kwargs = {
+            "input": prompt,
+            "background": True,
+            "stream": False,
+        }
+
+        if model:
+            create_kwargs["model"] = model
+        else:
+            create_kwargs["agent"] = self.agent_name
+            create_kwargs["agent_config"] = merged_config
+
+        if previous_interaction_id:
+            create_kwargs["previous_interaction_id"] = previous_interaction_id
+
+        if tools:
+            create_kwargs["tools"] = tools
+
+        # Create the interaction
+        try:
+            interaction = self.client.interactions.create(**create_kwargs)
+        except Exception as e:
+            self.console.print(f"[bold red]Failed to start research: {e}[/bold red]")
+            raise
+
+        self.interaction_id = interaction.id
+        current_status = interaction.status
+        poll_count = 0
+        poll_errors = 0
+        max_poll_errors = 3
+        max_polls = 720  # ~1 hour at 5s intervals
+
+        def generate_view():
+            return Panel(
+                Spinner("dots", style="magenta", text=f"Status: {current_status}"),
+                title="Deep Research Agent (Polling)",
+                border_style="blue",
+                padding=(0, 1),
+            )
+
+        with Live(generate_view(), refresh_per_second=4, console=self.console) as live:
+            while current_status == "in_progress":
+                if poll_count >= max_polls:
+                    self.console.print(
+                        f"[bold red]Research timed out after "
+                        f"{poll_count * poll_interval}s[/bold red]"
+                    )
+                    return
+
+                time.sleep(poll_interval)
+                poll_count += 1
+
+                try:
+                    interaction = self.client.interactions.get(id=self.interaction_id)
+                    poll_errors = 0  # Reset on success
+                except Exception as e:
+                    poll_errors += 1
+                    if poll_errors >= max_poll_errors:
+                        self.console.print(
+                            f"[bold red]Polling failed after {max_poll_errors} "
+                            f"errors: {e}[/bold red]"
+                        )
+                        raise
+                    self.console.print(f"[yellow]Poll error: {e}. Retrying...[/yellow]")
+                    continue
+
+                current_status = interaction.status
+                live.update(generate_view())
+
+        # Handle final status
+        if current_status == "requires_action":
+            self.console.print(
+                "[yellow]Research requires action that cannot be handled "
+                f"automatically. Interaction ID: {self.interaction_id}[/yellow]"
+            )
+            return
+
+        if current_status == "failed":
+            error_msg = getattr(interaction, "error", None) or "Unknown error"
+            self.console.print(f"[bold red]Research failed: {error_msg}[/bold red]")
+            return
+
+        if current_status == "cancelled":
+            self.console.print("[yellow]Research was cancelled.[/yellow]")
+            return
+
+        if current_status == "completed":
+            # Extract final report from text outputs
+            if interaction.outputs:
+                # Find all text outputs and concatenate them
+                text_parts = [
+                    output.text
+                    for output in interaction.outputs
+                    if output.type == "text" and output.text
+                ]
+                if text_parts:
+                    report_text = "".join(text_parts)
+                    self.console.print(Markdown(report_text))
+
+                    if output_path:
+                        try:
+                            with open(output_path, "w", encoding="utf-8") as f:
+                                f.write(report_text)
+                            self.console.print(
+                                f"\n[green]Report saved to {output_path}[/green]"
+                            )
+                        except OSError as e:
+                            self.console.print(
+                                f"[bold red]Failed to save report: {e}[/bold red]"
+                            )
+                else:
+                    self.console.print(
+                        "[yellow]No text output received from research.[/yellow]"
+                    )
+            else:
+                self.console.print("[yellow]No output received from research.[/yellow]")

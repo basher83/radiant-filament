@@ -195,3 +195,168 @@ def test_stream_with_tools(monkeypatch):
 
     _, kwargs = mock_client.interactions.create.call_args
     assert kwargs["tools"] == tools
+
+
+class MockTextOutput:
+    def __init__(self, text):
+        self.type = "text"
+        self.text = text
+
+
+class MockInteraction:
+    def __init__(self, interaction_id, status, outputs=None):
+        self.id = interaction_id
+        self.status = status
+        self.outputs = outputs or []
+
+
+def test_poll_creates_interaction_without_stream(monkeypatch):
+    """Test that research_poll creates interaction with stream=False."""
+    mock_client = MagicMock()
+    mock_interaction = MockInteraction(
+        "test_123", "completed", [MockTextOutput("Done")]
+    )
+    mock_client.interactions.create.return_value = mock_interaction
+    mock_client.interactions.get.return_value = mock_interaction
+
+    agent = DeepResearchAgent()
+    agent.client = mock_client
+
+    # Mock sleep and console to speed up test
+    monkeypatch.setattr("time.sleep", MagicMock())
+    agent.console = MagicMock()
+
+    agent.research_poll("test prompt")
+
+    _, kwargs = mock_client.interactions.create.call_args
+    assert kwargs["stream"] is False
+    assert kwargs["background"] is True
+
+
+def test_poll_polls_until_completed(monkeypatch):
+    """Test that research_poll polls until status is completed."""
+    mock_client = MagicMock()
+
+    # Initial response: in_progress
+    initial_interaction = MockInteraction("test_123", "in_progress")
+    mock_client.interactions.create.return_value = initial_interaction
+
+    # Subsequent get calls: in_progress, then completed
+    poll_1 = MockInteraction("test_123", "in_progress")
+    poll_2 = MockInteraction("test_123", "completed", [MockTextOutput("Final report")])
+    mock_client.interactions.get.side_effect = [poll_1, poll_2]
+
+    agent = DeepResearchAgent()
+    agent.client = mock_client
+
+    # Mock sleep and console
+    mock_sleep = MagicMock()
+    monkeypatch.setattr("time.sleep", mock_sleep)
+    agent.console = MagicMock()
+
+    agent.research_poll("test prompt", poll_interval=1)
+
+    # Should have called get twice
+    assert mock_client.interactions.get.call_count == 2
+    # Should have slept twice
+    assert mock_sleep.call_count == 2
+
+
+def test_poll_handles_failed_status(monkeypatch):
+    """Test that research_poll handles failed status."""
+    mock_client = MagicMock()
+    mock_interaction = MockInteraction("test_123", "failed")
+    mock_client.interactions.create.return_value = mock_interaction
+
+    agent = DeepResearchAgent()
+    agent.client = mock_client
+
+    monkeypatch.setattr("time.sleep", MagicMock())
+    agent.console = MagicMock()
+
+    agent.research_poll("test prompt")
+
+    # Should print error message
+    agent.console.print.assert_called()
+    call_args = str(agent.console.print.call_args)
+    assert "failed" in call_args.lower()
+
+
+def test_poll_extracts_text_from_outputs(monkeypatch):
+    """Test that research_poll extracts text from outputs correctly."""
+    mock_client = MagicMock()
+    outputs = [MockTextOutput("Part 1"), MockTextOutput("Part 2")]
+    mock_interaction = MockInteraction("test_123", "completed", outputs)
+    mock_client.interactions.create.return_value = mock_interaction
+
+    agent = DeepResearchAgent()
+    agent.client = mock_client
+
+    monkeypatch.setattr("time.sleep", MagicMock())
+    agent.console = MagicMock()
+
+    agent.research_poll("test prompt")
+
+    # Console.print should have been called with Markdown containing concatenated text
+    from rich.markdown import Markdown
+
+    calls = agent.console.print.call_args_list
+    markdown_calls = [c for c in calls if isinstance(c[0][0], Markdown)]
+    assert len(markdown_calls) > 0
+
+
+def test_poll_handles_create_exception(monkeypatch):
+    """Test that research_poll handles create() exceptions."""
+    mock_client = MagicMock()
+    mock_client.interactions.create.side_effect = Exception("API unavailable")
+
+    agent = DeepResearchAgent()
+    agent.client = mock_client
+    agent.console = MagicMock()
+
+    with pytest.raises(Exception, match="API unavailable"):
+        agent.research_poll("test prompt")
+
+    # Should have printed error message before raising
+    agent.console.print.assert_called()
+
+
+def test_poll_handles_cancelled_status(monkeypatch):
+    """Test that research_poll handles cancelled status."""
+    mock_client = MagicMock()
+    mock_interaction = MockInteraction("test_123", "cancelled")
+    mock_client.interactions.create.return_value = mock_interaction
+
+    agent = DeepResearchAgent()
+    agent.client = mock_client
+
+    monkeypatch.setattr("time.sleep", MagicMock())
+    agent.console = MagicMock()
+
+    agent.research_poll("test prompt")
+
+    # Should print cancelled message
+    agent.console.print.assert_called()
+    call_args = str(agent.console.print.call_args)
+    assert "cancelled" in call_args.lower()
+
+
+def test_poll_saves_to_output_path(monkeypatch, tmp_path):
+    """Test that research_poll saves output to file when path provided."""
+    mock_client = MagicMock()
+    mock_interaction = MockInteraction(
+        "test_123", "completed", [MockTextOutput("Report content")]
+    )
+    mock_client.interactions.create.return_value = mock_interaction
+
+    agent = DeepResearchAgent()
+    agent.client = mock_client
+
+    monkeypatch.setattr("time.sleep", MagicMock())
+    agent.console = MagicMock()
+
+    output_file = tmp_path / "output.md"
+    agent.research_poll("test prompt", output_path=str(output_file))
+
+    assert output_file.exists()
+    assert output_file.read_text() == "Report content"

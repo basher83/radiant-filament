@@ -36,6 +36,20 @@ class TestParseAgentConfig:
             finally:
                 os.unlink(f.name)
 
+    def test_invalid_json_in_file_raises(self):
+        """Test that invalid JSON in a file raises ArgumentTypeError."""
+        import argparse
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            f.write("not valid json content")
+            f.flush()
+
+            try:
+                with pytest.raises(argparse.ArgumentTypeError, match="Invalid JSON in"):
+                    parse_agent_config(f.name)
+            finally:
+                os.unlink(f.name)
+
 
 class TestValidateFileSearchStore:
     def test_valid_store_name(self):
