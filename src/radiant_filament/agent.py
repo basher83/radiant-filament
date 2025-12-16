@@ -57,6 +57,15 @@ class DeepResearchAgent:
             model: Use a model instead of agent. When provided, agent_config is
                 ignored. Typically used with previous_interaction_id for follow-ups.
             tools: List of tools (e.g., file_search) for the agent to use.
+
+        Yields:
+            Event objects from the API with event_type attribute. Key types:
+            interaction.start, content.delta, interaction.complete, error.
+
+        Raises:
+            RuntimeError: If reconnection fails after max_retries attempts.
+            ConnectionError, TimeoutError, OSError: If initial connection fails
+                before an interaction is established.
         """
         merged_config = self._merge_agent_config(agent_config)
 
@@ -100,11 +109,11 @@ class DeepResearchAgent:
                 if event.event_type in ["interaction.complete", "error"]:
                     is_complete = True
 
-        except Exception as e:
+        except (ConnectionError, TimeoutError, OSError) as e:
             # If we haven't established an interaction yet, we can't reconnect.
             # Re-raise the exception to notify the user.
             if not self.interaction_id:
-                raise e
+                raise
             # Initial connection dropped mid-stream; proceed to reconnection loop.
             self.console.print(
                 f"[yellow]Stream interrupted: {e}. Reconnecting...[/yellow]"
@@ -134,7 +143,7 @@ class DeepResearchAgent:
                 # Reset retry count on successful stream processing
                 retry_count = 0
 
-            except Exception as e:
+            except (ConnectionError, TimeoutError, OSError) as e:
                 # Reconnection failed; back off and retry
                 retry_count += 1
                 self.console.print(
@@ -167,6 +176,10 @@ class DeepResearchAgent:
             model: Use a model instead of agent. When provided, agent_config is
                 ignored. Typically used with previous_interaction_id for follow-ups.
             tools: List of tools (e.g., file_search) for the agent to use.
+
+        Raises:
+            RuntimeError: If output_path cannot be opened for writing, if the
+                API returns an error event, or if reconnection fails.
         """
         out_file = None
         if output_path:
@@ -224,13 +237,15 @@ class DeepResearchAgent:
                         is_complete = True
                         live.update(generate_view())
                         if event.event_type == "error":
+                            error_str = str(event.error)
                             self.console.print(
                                 f"[bold red]\nError: {event.error}[/bold red]"
                             )
-                            if "Function call is empty" in str(event.error):
+                            if "Function call is empty" in error_str:
                                 self.console.print(
                                     "[yellow]Tip: This is a known intermittent issue with the Deep Research Preview model. Please try running the command again.[/yellow]"
                                 )
+                            raise RuntimeError(f"Research error: {error_str}")
 
         finally:
             if out_file:
@@ -257,14 +272,23 @@ class DeepResearchAgent:
                 ignored. Typically used with previous_interaction_id for follow-ups.
             tools: List of tools (e.g., file_search) for the agent to use.
             poll_interval: Seconds between status polls (default: 5).
+
+        Raises:
+            RuntimeError: If output_path is not writable, research fails, is
+                cancelled, requires action, or completes without output.
+            TimeoutError: If polling exceeds max_polls (~1 hour at default interval).
         """
         # Validate output path early (consistent with research() behavior)
         if output_path:
-            try:
-                with open(output_path, "w", encoding="utf-8") as f:
-                    pass  # Just test we can write
-            except OSError as e:
-                raise RuntimeError(f"Cannot write to '{output_path}': {e}") from e
+            parent_dir = os.path.dirname(output_path) or "."
+            if not os.path.isdir(parent_dir):
+                raise RuntimeError(
+                    f"Cannot write to '{output_path}': directory does not exist"
+                )
+            if not os.access(parent_dir, os.W_OK):
+                raise RuntimeError(
+                    f"Cannot write to '{output_path}': directory not writable"
+                )
 
         merged_config = self._merge_agent_config(agent_config)
 
@@ -324,7 +348,7 @@ class DeepResearchAgent:
                 try:
                     interaction = self.client.interactions.get(id=self.interaction_id)
                     poll_errors = 0  # Reset on success
-                except Exception as e:
+                except (ConnectionError, TimeoutError, OSError) as e:
                     poll_errors += 1
                     if poll_errors >= max_poll_errors:
                         self.console.print(
