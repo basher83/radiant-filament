@@ -38,6 +38,10 @@ run = "ruff format ."
 description = "Check formatting with Ruff"
 run = "ruff format . --check"
 
+[tasks.test]
+description = "Run tests with pytest"
+run = "uv run pytest"
+
 # === Hooks tasks ===
 [tasks.hooks-install]
 description = "Install prek and infisical hooks"
