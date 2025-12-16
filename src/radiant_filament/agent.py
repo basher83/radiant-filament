@@ -26,7 +26,14 @@ class DeepResearchAgent:
         self.console = Console()
 
     def _merge_agent_config(self, user_config):
-        """Merge user config with defaults. User values override defaults."""
+        """Merge user config with defaults. User values override defaults.
+
+        Args:
+            user_config: Optional dict of config overrides. If None, returns defaults.
+
+        Returns:
+            dict: Merged configuration with DEFAULT_AGENT_CONFIG as base.
+        """
         if user_config is None:
             return self.DEFAULT_AGENT_CONFIG.copy()
         return {**self.DEFAULT_AGENT_CONFIG, **user_config}
@@ -47,8 +54,8 @@ class DeepResearchAgent:
             prompt: The research prompt or follow-up question.
             agent_config: Optional config to override defaults.
             previous_interaction_id: For follow-up questions on completed research.
-            model: Use a model instead of agent (CLI enforces this requires
-                previous_interaction_id).
+            model: Use a model instead of agent. When provided, agent_config is
+                ignored. Typically used with previous_interaction_id for follow-ups.
             tools: List of tools (e.g., file_search) for the agent to use.
         """
         merged_config = self._merge_agent_config(agent_config)
@@ -157,8 +164,8 @@ class DeepResearchAgent:
             agent_config: Optional config to override defaults.
             output_path: Path to save the research report.
             previous_interaction_id: For follow-up questions on completed research.
-            model: Use a model instead of agent (CLI enforces this requires
-                previous_interaction_id).
+            model: Use a model instead of agent. When provided, agent_config is
+                ignored. Typically used with previous_interaction_id for follow-ups.
             tools: List of tools (e.g., file_search) for the agent to use.
         """
         out_file = None
@@ -246,11 +253,19 @@ class DeepResearchAgent:
             agent_config: Optional config to override defaults.
             output_path: Path to save the research report.
             previous_interaction_id: For follow-up questions on completed research.
-            model: Use a model instead of agent (CLI enforces this requires
-                previous_interaction_id).
+            model: Use a model instead of agent. When provided, agent_config is
+                ignored. Typically used with previous_interaction_id for follow-ups.
             tools: List of tools (e.g., file_search) for the agent to use.
             poll_interval: Seconds between status polls (default: 5).
         """
+        # Validate output path early (consistent with research() behavior)
+        if output_path:
+            try:
+                with open(output_path, "w", encoding="utf-8") as f:
+                    pass  # Just test we can write
+            except OSError as e:
+                raise RuntimeError(f"Cannot write to '{output_path}': {e}") from e
+
         merged_config = self._merge_agent_config(agent_config)
 
         # Build request kwargs
@@ -297,11 +312,11 @@ class DeepResearchAgent:
         with Live(generate_view(), refresh_per_second=4, console=self.console) as live:
             while current_status == "in_progress":
                 if poll_count >= max_polls:
-                    self.console.print(
-                        f"[bold red]Research timed out after "
-                        f"{poll_count * poll_interval}s[/bold red]"
+                    timeout_msg = (
+                        f"Research timed out after {poll_count * poll_interval}s"
                     )
-                    return
+                    self.console.print(f"[bold red]{timeout_msg}[/bold red]")
+                    raise TimeoutError(timeout_msg)
 
                 time.sleep(poll_interval)
                 poll_count += 1
@@ -325,20 +340,18 @@ class DeepResearchAgent:
 
         # Handle final status
         if current_status == "requires_action":
-            self.console.print(
-                "[yellow]Research requires action that cannot be handled "
-                f"automatically. Interaction ID: {self.interaction_id}[/yellow]"
-            )
-            return
+            msg = f"Research requires action. Interaction ID: {self.interaction_id}"
+            self.console.print(f"[yellow]{msg}[/yellow]")
+            raise RuntimeError(msg)
 
         if current_status == "failed":
             error_msg = getattr(interaction, "error", None) or "Unknown error"
             self.console.print(f"[bold red]Research failed: {error_msg}[/bold red]")
-            return
+            raise RuntimeError(f"Research failed: {error_msg}")
 
         if current_status == "cancelled":
             self.console.print("[yellow]Research was cancelled.[/yellow]")
-            return
+            raise RuntimeError("Research was cancelled")
 
         if current_status == "completed":
             # Extract final report from text outputs
@@ -364,9 +377,14 @@ class DeepResearchAgent:
                             self.console.print(
                                 f"[bold red]Failed to save report: {e}[/bold red]"
                             )
+                            raise RuntimeError(
+                                f"Failed to save report to '{output_path}': {e}"
+                            ) from e
                 else:
-                    self.console.print(
-                        "[yellow]No text output received from research.[/yellow]"
-                    )
+                    msg = "Research completed but no text output was received"
+                    self.console.print(f"[yellow]{msg}[/yellow]")
+                    raise RuntimeError(msg)
             else:
-                self.console.print("[yellow]No output received from research.[/yellow]")
+                msg = "Research completed but no output was received"
+                self.console.print(f"[yellow]{msg}[/yellow]")
+                raise RuntimeError(msg)

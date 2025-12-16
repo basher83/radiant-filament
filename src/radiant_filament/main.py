@@ -7,7 +7,17 @@ from .agent import DeepResearchAgent
 
 
 def parse_agent_config(value):
-    """Parse agent config from JSON string or file path."""
+    """Parse agent config from JSON string or file path.
+
+    Args:
+        value: JSON string, path to JSON file, or None.
+
+    Returns:
+        dict or None: Parsed config dict, or None if value is None.
+
+    Raises:
+        argparse.ArgumentTypeError: If JSON is invalid or file cannot be read.
+    """
     if value is None:
         return None
 
@@ -31,7 +41,17 @@ def parse_agent_config(value):
 
 
 def validate_file_search_store(value):
-    """Validate file search store name format."""
+    """Validate file search store name format.
+
+    Args:
+        value: Store name string to validate.
+
+    Returns:
+        str: The validated store name (unchanged if valid).
+
+    Raises:
+        argparse.ArgumentTypeError: If store name doesn't start with 'fileSearchStores/'.
+    """
     if not value.startswith("fileSearchStores/"):
         raise argparse.ArgumentTypeError(
             f"Invalid store format: {value}. Expected: fileSearchStores/<name>"
