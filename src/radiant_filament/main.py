@@ -54,6 +54,9 @@ Examples:
   # Use polling instead of streaming
   %(prog)s "Research topic" --no-stream
 
+  # Research using a prompt file
+  %(prog)s --prompt-file prompt.md --output report.md
+
   # Follow-up on previous research
   %(prog)s "Elaborate on point 2" --previous-interaction-id <id>
 
@@ -67,7 +70,16 @@ Examples:
   %(prog)s "Research topic" --agent-config '{"thinking_summaries": "none"}'
 """,
     )
-    parser.add_argument("prompt", help="The research prompt to execute")
+    parser.add_argument(
+        "prompt",
+        nargs="?",
+        help="The research prompt to execute",
+    )
+    parser.add_argument(
+        "--prompt-file",
+        metavar="PATH",
+        help="Path to a file containing the research prompt (e.g., prompt.md)",
+    )
     parser.add_argument(
         "--agent-name",
         default="deep-research-pro-preview-12-2025",
@@ -108,6 +120,20 @@ Examples:
     )
 
     args = parser.parse_args()
+
+    # Validation: exactly one of prompt or --prompt-file required
+    if args.prompt and args.prompt_file:
+        parser.error("Cannot use both positional prompt and --prompt-file")
+    if not args.prompt and not args.prompt_file:
+        parser.error("Must provide either a prompt or --prompt-file")
+
+    # Read prompt from file if provided
+    if args.prompt_file:
+        try:
+            with open(args.prompt_file, encoding="utf-8") as f:
+                args.prompt = f.read()
+        except OSError as e:
+            parser.error(f"Cannot read prompt file '{args.prompt_file}': {e}")
 
     # Validation: --model requires --previous-interaction-id
     if args.model and not args.previous_interaction_id:
