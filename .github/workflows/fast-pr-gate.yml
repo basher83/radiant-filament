@@ -1,0 +1,64 @@
+name: Fast PR Gate
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fast-pr-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast-pr-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup mise
+        uses: jdx/mise-action@v3
+        with:
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Detect available mise tasks
+        id: detect
+        run: |
+          # Detect if mise tasks exist
+          if mise tasks 2>/dev/null | grep -q "^lint"; then
+            echo "has_lint=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_lint=false" >> "$GITHUB_OUTPUT"
+          fi
+          
+          if mise tasks 2>/dev/null | grep -q "^format-check"; then
+            echo "has_format_check=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_format_check=false" >> "$GITHUB_OUTPUT"
+          fi
+          
+          # Check if pytest is available
+          if command -v pytest >/dev/null 2>&1 || uv run pytest --version >/dev/null 2>&1; then
+            echo "has_pytest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_pytest=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run lint
+        if: steps.detect.outputs.has_lint == 'true'
+        run: mise run lint
+
+      - name: Run format check
+        if: steps.detect.outputs.has_format_check == 'true'
+        run: mise run format-check
+
+      - name: Run tests
+        if: steps.detect.outputs.has_pytest == 'true'
+        run: uv run pytest
