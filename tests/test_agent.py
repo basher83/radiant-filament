@@ -263,7 +263,7 @@ def test_poll_polls_until_completed(monkeypatch):
 
 
 def test_poll_handles_failed_status(monkeypatch):
-    """Test that research_poll handles failed status."""
+    """Test that research_poll raises RuntimeError on failed status."""
     mock_client = MagicMock()
     mock_interaction = MockInteraction("test_123", "failed")
     mock_client.interactions.create.return_value = mock_interaction
@@ -274,12 +274,11 @@ def test_poll_handles_failed_status(monkeypatch):
     monkeypatch.setattr("time.sleep", MagicMock())
     agent.console = MagicMock()
 
-    agent.research_poll("test prompt")
+    with pytest.raises(RuntimeError, match="Research failed"):
+        agent.research_poll("test prompt")
 
-    # Should print error message
+    # Should also print error message
     agent.console.print.assert_called()
-    call_args = str(agent.console.print.call_args)
-    assert "failed" in call_args.lower()
 
 
 def test_poll_extracts_text_from_outputs(monkeypatch):
@@ -322,7 +321,7 @@ def test_poll_handles_create_exception(monkeypatch):
 
 
 def test_poll_handles_cancelled_status(monkeypatch):
-    """Test that research_poll handles cancelled status."""
+    """Test that research_poll raises RuntimeError on cancelled status."""
     mock_client = MagicMock()
     mock_interaction = MockInteraction("test_123", "cancelled")
     mock_client.interactions.create.return_value = mock_interaction
@@ -333,12 +332,11 @@ def test_poll_handles_cancelled_status(monkeypatch):
     monkeypatch.setattr("time.sleep", MagicMock())
     agent.console = MagicMock()
 
-    agent.research_poll("test prompt")
+    with pytest.raises(RuntimeError, match="cancelled"):
+        agent.research_poll("test prompt")
 
-    # Should print cancelled message
+    # Should also print cancelled message
     agent.console.print.assert_called()
-    call_args = str(agent.console.print.call_args)
-    assert "cancelled" in call_args.lower()
 
 
 def test_poll_saves_to_output_path(monkeypatch, tmp_path):
