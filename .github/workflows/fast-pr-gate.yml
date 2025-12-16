@@ -1,0 +1,44 @@
+name: "Fast PR Gate"
+
+# mise setup via: https://github.com/jdx/mise-action
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: "fast-pr-gate-${{ github.ref }}"
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fast-pr-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up mise
+        uses: jdx/mise-action@v3
+        with:
+          install: true
+          cache: true
+          github_token: ${{ github.token }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: mise run lint
+
+      - name: Format check
+        run: mise run format-check
+
+      - name: Tests
+        run: mise run test
