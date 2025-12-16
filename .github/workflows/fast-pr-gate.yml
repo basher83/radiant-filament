@@ -1,0 +1,42 @@
+name: Fast PR Gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Lint, Format Check, and Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install and setup mise
+        uses: jdx/mise-action@v3
+        with:
+          github_token: ${{ github.token }}
+          install: true
+          cache: true
+
+      - name: Install Python dependencies
+        run: uv sync --dev
+
+      - name: Run lint
+        run: mise run lint
+
+      - name: Run format check
+        run: mise run format-check
+
+      - name: Run tests
+        run: uv run pytest
