@@ -37,11 +37,11 @@ def test_robust_stream_recovers_from_error(monkeypatch):
     """
     mock_client = MagicMock()
 
-    # Stream 1: Yields one event then raises Exception
+    # Stream 1: Yields one event then raises connection error
     def stream_1():
         yield MockEvent("interaction.start", restart=True)
         yield MockEvent("content.delta", event_id="1", text="Hello")
-        raise Exception("Connection dropped")
+        raise ConnectionError("Connection dropped")
 
     # Stream 2: Resumes, yields more events, completes
     def stream_2():
@@ -376,11 +376,11 @@ def test_stream_raises_after_max_retries(monkeypatch):
     # Stream that establishes interaction_id then fails
     def stream_1():
         yield MockEvent("interaction.start", restart=True)
-        raise Exception("Connection dropped")
+        raise ConnectionError("Connection dropped")
 
     mock_client.interactions.create.return_value = stream_1()
     # All reconnection attempts fail
-    mock_client.interactions.get.side_effect = Exception("Network error")
+    mock_client.interactions.get.side_effect = ConnectionError("Network error")
 
     agent = DeepResearchAgent()
     agent.client = mock_client
@@ -451,7 +451,7 @@ def test_poll_recovers_from_transient_error(monkeypatch):
     mock_client.interactions.create.return_value = initial
 
     mock_client.interactions.get.side_effect = [
-        Exception("Transient error"),
+        ConnectionError("Transient error"),
         MockInteraction("test_123", "completed", [MockTextOutput("Done")]),
     ]
 
