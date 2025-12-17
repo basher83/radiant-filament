@@ -1,38 +1,34 @@
-name: "Fast PR Gate"
-
-# mise setup via: https://github.com/jdx/mise-action
+name: Fast PR Gate
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
   push:
-    branches:
-      - main
-
-concurrency:
-  group: "fast-pr-gate-${{ github.ref }}"
-  cancel-in-progress: true
+    branches: [main]
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   fast-pr-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
-      - name: Set up mise
+          
+      - name: Setup mise
         uses: jdx/mise-action@v3
         with:
           install: true
           cache: true
-          github_token: ${{ github.token }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install dependencies
+      - name: Run CI
         run: mise run ci
