@@ -22,6 +22,19 @@ pandoc = "3.8.3"
 [tasks]
 start = "uv run radiant-filament"
 
+[tasks.ci] # only dependencies to be run
+description = 'Run CI tasks'
+depends = ['deps-ci', 'lint', 'format-check', 'test']
+alias = 'ci'
+
+[tasks.deps]
+description = "Install dependencies"
+run = "uv sync"
+
+[tasks.deps-ci]
+description = "Install dependencies for CI"
+run = "uv sync --frozen"
+
 [tasks.lint]
 description = "Lint with Ruff"
 run = "ruff check ."
@@ -37,6 +50,10 @@ run = "ruff format ."
 [tasks.format-check]
 description = "Check formatting with Ruff"
 run = "ruff format . --check"
+
+[tasks.test]
+description = "Run tests with pytest"
+run = "uv run pytest"
 
 # === Hooks tasks ===
 [tasks.hooks-install]
