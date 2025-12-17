@@ -30,5 +30,14 @@ jobs:
           cache: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run CI
-        run: mise run ci
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run lint
+        run: mise run lint
+
+      - name: Check formatting
+        run: mise run format-check
+
+      - name: Run tests
+        run: uv run pytest
