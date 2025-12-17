@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Set up mise
         uses: jdx/mise-action@v3
@@ -32,13 +34,4 @@ jobs:
           github_token: ${{ github.token }}
 
       - name: Install dependencies
-        run: uv sync --frozen
-
-      - name: Lint
-        run: mise run lint
-
-      - name: Format check
-        run: mise run format-check
-
-      - name: Tests
-        run: mise run test
+        run: mise run ci
