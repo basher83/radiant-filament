@@ -31,6 +31,11 @@ line-ending = "auto"
 [tool.uv]
 package = true
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:install \"ipywidgets\" for Jupyter support:UserWarning",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
