@@ -12,14 +12,32 @@ from rich.spinner import Spinner
 class DeepResearchAgent:
     DEFAULT_AGENT_CONFIG = {"type": "deep-research", "thinking_summaries": "auto"}
 
-    def __init__(self, agent_name="deep-research-pro-preview-12-2025"):
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError(
-                "GEMINI_API_KEY environment variable is required. "
-                "Get your key at https://aistudio.google.com/app/apikey"
-            )
-        self.client = genai.Client(api_key=api_key)
+    def __init__(
+        self,
+        agent_name: str = "deep-research-pro-preview-12-2025",
+        *,
+        client: genai.Client | None = None,
+    ):
+        """Initialize the DeepResearchAgent.
+
+        Args:
+            agent_name: The Gemini agent version to use.
+            client: Optional pre-configured genai.Client. If not provided,
+                creates one using GEMINI_API_KEY environment variable.
+
+        Raises:
+            ValueError: If client is None and GEMINI_API_KEY is not set.
+        """
+        if client is not None:
+            self.client = client
+        else:
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    "GEMINI_API_KEY environment variable is required. "
+                    "Get your key at https://aistudio.google.com/app/apikey"
+                )
+            self.client = genai.Client(api_key=api_key)
         self.agent_name = agent_name
         self.last_event_id = None
         self.interaction_id = None

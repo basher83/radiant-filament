@@ -27,8 +27,38 @@ class MockEvent:
 
 
 def test_agent_initialization():
-    agent = DeepResearchAgent()
+    mock_client = MagicMock()
+    agent = DeepResearchAgent(client=mock_client)
     assert agent.agent_name == "deep-research-pro-preview-12-2025"
+    assert agent.client is mock_client
+
+
+def test_agent_initialization_with_custom_agent_name():
+    """Test that custom agent_name works with injected client."""
+    mock_client = MagicMock()
+    custom_name = "custom-research-agent-v1"
+    agent = DeepResearchAgent(agent_name=custom_name, client=mock_client)
+    assert agent.agent_name == custom_name
+    assert agent.client is mock_client
+
+
+def test_client_injection_skips_api_key_validation(monkeypatch):
+    """Test that providing a client bypasses GEMINI_API_KEY requirement."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    mock_client = MagicMock()
+    agent = DeepResearchAgent(client=mock_client)
+    assert agent.client is mock_client
+
+
+def test_agent_initialization_sets_state_variables():
+    """Test that state variables are initialized correctly."""
+    from rich.console import Console
+
+    mock_client = MagicMock()
+    agent = DeepResearchAgent(client=mock_client)
+    assert agent.last_event_id is None
+    assert agent.interaction_id is None
+    assert isinstance(agent.console, Console)
 
 
 def test_robust_stream_recovers_from_error(monkeypatch):
@@ -53,8 +83,7 @@ def test_robust_stream_recovers_from_error(monkeypatch):
     mock_client.interactions.get.return_value = stream_2()
 
     # Init agent with mock client
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
 
     # We need to mock time.sleep to speed up test
     mock_sleep = MagicMock()
@@ -99,8 +128,7 @@ def test_initial_connection_failure_raises():
     mock_client = MagicMock()
     mock_client.interactions.create.side_effect = Exception("API Error")
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
 
     with pytest.raises(Exception, match="API Error"):
         list(agent.start_research_stream("test prompt"))
@@ -108,21 +136,21 @@ def test_initial_connection_failure_raises():
 
 def test_merge_agent_config_with_none():
     """Test that None config returns defaults."""
-    agent = DeepResearchAgent()
+    agent = DeepResearchAgent(client=MagicMock())
     result = agent._merge_agent_config(None)
     assert result == {"type": "deep-research", "thinking_summaries": "auto"}
 
 
 def test_merge_agent_config_with_override():
     """Test that user config overrides defaults."""
-    agent = DeepResearchAgent()
+    agent = DeepResearchAgent(client=MagicMock())
     result = agent._merge_agent_config({"thinking_summaries": "none"})
     assert result == {"type": "deep-research", "thinking_summaries": "none"}
 
 
 def test_merge_agent_config_preserves_type():
     """Test that type is preserved unless explicitly overridden."""
-    agent = DeepResearchAgent()
+    agent = DeepResearchAgent(client=MagicMock())
     result = agent._merge_agent_config({"custom_key": "value"})
     assert result["type"] == "deep-research"
     assert result["custom_key"] == "value"
@@ -138,8 +166,7 @@ def test_stream_with_previous_interaction_id(monkeypatch):
 
     mock_client.interactions.create.return_value = stream()
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
 
     list(agent.start_research_stream("follow-up", previous_interaction_id="prev_123"))
 
@@ -157,8 +184,7 @@ def test_stream_with_model_instead_of_agent(monkeypatch):
 
     mock_client.interactions.create.return_value = stream()
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
 
     list(
         agent.start_research_stream(
@@ -182,8 +208,7 @@ def test_stream_with_tools(monkeypatch):
 
     mock_client.interactions.create.return_value = stream()
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
 
     tools = [
         {
@@ -219,8 +244,7 @@ def test_poll_creates_interaction_without_stream(monkeypatch):
     mock_client.interactions.create.return_value = mock_interaction
     mock_client.interactions.get.return_value = mock_interaction
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
 
     # Mock sleep and console to speed up test
     monkeypatch.setattr("time.sleep", MagicMock())
@@ -246,8 +270,7 @@ def test_poll_polls_until_completed(monkeypatch):
     poll_2 = MockInteraction("test_123", "completed", [MockTextOutput("Final report")])
     mock_client.interactions.get.side_effect = [poll_1, poll_2]
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
 
     # Mock sleep and console
     mock_sleep = MagicMock()
@@ -268,8 +291,7 @@ def test_poll_handles_failed_status(monkeypatch):
     mock_interaction = MockInteraction("test_123", "failed")
     mock_client.interactions.create.return_value = mock_interaction
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
 
     monkeypatch.setattr("time.sleep", MagicMock())
     agent.console = MagicMock()
@@ -288,8 +310,7 @@ def test_poll_extracts_text_from_outputs(monkeypatch):
     mock_interaction = MockInteraction("test_123", "completed", outputs)
     mock_client.interactions.create.return_value = mock_interaction
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
 
     monkeypatch.setattr("time.sleep", MagicMock())
     agent.console = MagicMock()
@@ -309,8 +330,7 @@ def test_poll_handles_create_exception(monkeypatch):
     mock_client = MagicMock()
     mock_client.interactions.create.side_effect = Exception("API unavailable")
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
     agent.console = MagicMock()
 
     with pytest.raises(Exception, match="API unavailable"):
@@ -326,8 +346,7 @@ def test_poll_handles_cancelled_status(monkeypatch):
     mock_interaction = MockInteraction("test_123", "cancelled")
     mock_client.interactions.create.return_value = mock_interaction
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
 
     monkeypatch.setattr("time.sleep", MagicMock())
     agent.console = MagicMock()
@@ -347,8 +366,7 @@ def test_poll_saves_to_output_path(monkeypatch, tmp_path):
     )
     mock_client.interactions.create.return_value = mock_interaction
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
 
     monkeypatch.setattr("time.sleep", MagicMock())
     agent.console = MagicMock()
@@ -382,8 +400,7 @@ def test_stream_raises_after_max_retries(monkeypatch):
     # All reconnection attempts fail
     mock_client.interactions.get.side_effect = ConnectionError("Network error")
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
     agent.console = MagicMock()
     monkeypatch.setattr("time.sleep", MagicMock())
 
@@ -404,8 +421,7 @@ def test_poll_times_out_after_max_polls(monkeypatch):
     mock_interaction = MockInteraction("test_123", "in_progress")
     mock_client.interactions.create.return_value = mock_interaction
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
     agent.console = MagicMock()
 
     # Speed up test by mocking sleep
@@ -434,8 +450,7 @@ def test_poll_raises_on_requires_action(monkeypatch):
     mock_interaction = MockInteraction("test_123", "requires_action")
     mock_client.interactions.create.return_value = mock_interaction
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
     agent.console = MagicMock()
 
     monkeypatch.setattr("time.sleep", MagicMock())
@@ -455,8 +470,7 @@ def test_poll_recovers_from_transient_error(monkeypatch):
         MockInteraction("test_123", "completed", [MockTextOutput("Done")]),
     ]
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
     monkeypatch.setattr("time.sleep", MagicMock())
     agent.console = MagicMock()
 
@@ -470,8 +484,7 @@ def test_poll_raises_on_no_output(monkeypatch):
     mock_interaction = MockInteraction("test_123", "completed", [])  # Empty outputs
     mock_client.interactions.create.return_value = mock_interaction
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
     agent.console = MagicMock()
 
     monkeypatch.setattr("time.sleep", MagicMock())
@@ -488,8 +501,7 @@ def test_poll_raises_on_file_write_failure(monkeypatch, tmp_path):
     )
     mock_client.interactions.create.return_value = mock_interaction
 
-    agent = DeepResearchAgent()
-    agent.client = mock_client
+    agent = DeepResearchAgent(client=mock_client)
     agent.console = MagicMock()
 
     monkeypatch.setattr("time.sleep", MagicMock())
