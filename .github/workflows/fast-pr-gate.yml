@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 name: "Fast PR Gate"
 
 # mise setup via: https://github.com/jdx/mise-action
@@ -15,126 +13,26 @@ on:
 concurrency:
   group: "fast-pr-gate-${{ github.ref }}"
   cancel-in-progress: true
-=======
-=======
->>>>>>> a135ee2 (ci: add fast PR gate workflow)
-name: Fast PR Gate
-
-on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
-<<<<<<< HEAD
->>>>>>> 6f3ca28 (Add fast-pr-gate CI workflow)
-=======
-=======
-name: "Fast PR Gate"
-
-# mise setup via: https://github.com/jdx/mise-action
-
-on:
-  pull_request:
-    branches:
-      - main
-  push:
-    branches:
-      - main
-
-concurrency:
-  group: "fast-pr-gate-${{ github.ref }}"
-  cancel-in-progress: true
->>>>>>> 10bf967 (ci: add fast PR gate workflow)
->>>>>>> a135ee2 (ci: add fast PR gate workflow)
 
 permissions:
   contents: read
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-=======
->>>>>>> a135ee2 (ci: add fast PR gate workflow)
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-<<<<<<< HEAD
->>>>>>> 6f3ca28 (Add fast-pr-gate CI workflow)
-=======
-=======
->>>>>>> 10bf967 (ci: add fast PR gate workflow)
->>>>>>> a135ee2 (ci: add fast PR gate workflow)
 jobs:
   fast-pr-gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-<<<<<<< HEAD
-<<<<<<< HEAD
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Set up mise
-=======
-=======
->>>>>>> a135ee2 (ci: add fast PR gate workflow)
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup mise
-<<<<<<< HEAD
->>>>>>> 6f3ca28 (Add fast-pr-gate CI workflow)
-=======
-=======
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up mise
->>>>>>> 10bf967 (ci: add fast PR gate workflow)
->>>>>>> a135ee2 (ci: add fast PR gate workflow)
         uses: jdx/mise-action@v3
         with:
           install: true
           cache: true
-<<<<<<< HEAD
-<<<<<<< HEAD
           github_token: ${{ github.token }}
 
       - name: Install dependencies
         run: mise run ci
-=======
-=======
->>>>>>> a135ee2 (ci: add fast PR gate workflow)
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-=======
-          github_token: ${{ github.token }}
->>>>>>> 10bf967 (ci: add fast PR gate workflow)
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
-<<<<<<< HEAD
-      - name: Run lint
-        run: mise run lint
-
-      - name: Check formatting
-        run: mise run format-check
-
-      - name: Run tests
-        run: uv run pytest
-<<<<<<< HEAD
->>>>>>> 6f3ca28 (Add fast-pr-gate CI workflow)
-=======
-=======
-      - name: Lint
-        run: mise run lint
-
-      - name: Format check
-        run: mise run format-check
-
-      - name: Tests
-        run: mise run test
->>>>>>> 10bf967 (ci: add fast PR gate workflow)
->>>>>>> a135ee2 (ci: add fast PR gate workflow)
