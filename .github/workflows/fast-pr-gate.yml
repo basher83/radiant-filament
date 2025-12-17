@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 name: "Fast PR Gate"
 
 # mise setup via: https://github.com/jdx/mise-action
@@ -13,25 +14,64 @@ on:
 concurrency:
   group: "fast-pr-gate-${{ github.ref }}"
   cancel-in-progress: true
+=======
+name: Fast PR Gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+>>>>>>> 6f3ca28 (Add fast-pr-gate CI workflow)
 
 permissions:
   contents: read
 
+<<<<<<< HEAD
+=======
+concurrency:
+  group: fast-pr-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+>>>>>>> 6f3ca28 (Add fast-pr-gate CI workflow)
 jobs:
   fast-pr-gate:
     runs-on: ubuntu-latest
     steps:
+<<<<<<< HEAD
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Set up mise
+=======
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup mise
+>>>>>>> 6f3ca28 (Add fast-pr-gate CI workflow)
         uses: jdx/mise-action@v3
         with:
           install: true
           cache: true
+<<<<<<< HEAD
           github_token: ${{ github.token }}
 
       - name: Install dependencies
         run: mise run ci
+=======
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run lint
+        run: mise run lint
+
+      - name: Check formatting
+        run: mise run format-check
+
+      - name: Run tests
+        run: uv run pytest
+>>>>>>> 6f3ca28 (Add fast-pr-gate CI workflow)
