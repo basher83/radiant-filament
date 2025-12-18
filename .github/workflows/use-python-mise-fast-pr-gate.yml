@@ -1,0 +1,15 @@
+name: Python Mise PR Gate
+permissions:
+  contents: read
+  issues: write
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  fast-pr-gate:
+    uses: basher83/.github/.github/workflows/python-mise-fast-pr-gate.yml@main
