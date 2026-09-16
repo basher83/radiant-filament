@@ -12,4 +12,4 @@ on:
 
 jobs:
   fast-pr-gate:
-    uses: basher83/.github/.github/workflows/python-mise-fast-pr-gate.yml@4c3b036dc2359564cc774cb78e21a02300bae976 # main
+    uses: basher83/.github/.github/workflows/python-mise-fast-pr-gate.yml@1b4cb8937fe3b79581d151be6f9be5134831ec76 # main
