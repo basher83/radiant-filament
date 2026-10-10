@@ -12,12 +12,12 @@ show_env = false
 truncate = true
 
 [tools]
-python = "3.14.2"
-uv = "0.9.18"
-ruff = "0.14.10"
-prek = "0.2.13"
-git-cliff = "2.11.0"
-pandoc = "3.8.3"
+python = "3.15.0"
+uv = "0.13.0"
+ruff = "0.17.0"
+prek = "0.5.5"
+git-cliff = "2.14.2"
+pandoc = "3.12.1"
 
 [tasks]
 start = "uv run radiant-filament"
