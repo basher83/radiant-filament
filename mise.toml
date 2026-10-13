@@ -16,8 +16,8 @@ python = "3.14.2"
 uv = "0.9.18"
 ruff = "0.14.10"
 prek = "0.2.13"
-git-cliff = "2.11.0"
-pandoc = "3.8.3"
+git-cliff = "2.14.2"
+pandoc = "3.12.1"
 
 [tasks]
 start = "uv run radiant-filament"
