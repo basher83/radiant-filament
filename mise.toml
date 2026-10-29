@@ -17,7 +17,7 @@ uv = "0.9.18"
 ruff = "0.14.10"
 prek = "0.2.13"
 git-cliff = "2.14.2"
-pandoc = "3.12.1"
+pandoc = "3.13"
 
 [tasks]
 start = "uv run radiant-filament"
